@@ -1,18 +1,20 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
 const rpc = require('discord-rpc');
 const fs = require('fs');
 
 const secretsPath = path.join(__dirname, 'secrets.json');
 const secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8'));
+const clientId = secrets.client_id;
 
-rpc.register(secrets.clientId);
+rpc.register(clientId);
 
 const rpcClient = new rpc.Client({ transport: 'ipc' });
 
 rpcClient.on('ready', () => { console.log('RPC Connected!'); });
 
 function setActivity(details) {
+  console.log(details);
   rpcClient.setActivity({
     details: details.song,
     state: details.artist,
@@ -25,8 +27,10 @@ function setActivity(details) {
       { label: 'Listen on YouTube Music', url: details.url }
     ],
     startTimestamp: details.startTimestamp
-  });
+  }).catch(console.error);
 }
+
+rpcClient.login({ clientId }).catch(console.error);
 
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -37,20 +41,30 @@ if (require('electron-squirrel-startup')) {
 const createWindow = () => {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
-    webPreferences: {
+    width: 1000,
+    height: 1200,
+    titleBarStyle: 'hiddeninset',
+    autoHideMenuBar: true,
+      webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: true,
-      contextIsolation: false
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: false, // This is necessary to prevent CORS errors
     },
   });
+
 
   // load youtube music
   mainWindow.loadURL('https://music.youtube.com');
 
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
+
+  ipcMain.on('update-activity', (event, details) => {
+    console.log('Updating activity...');
+    setActivity(details);
+  });
+
 };
 
 // This method will be called when Electron has finished
