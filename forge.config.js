@@ -41,4 +41,16 @@ module.exports = {
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),
   ],
+    publishers: [
+      {
+        name: '@electron-forge/publisher-github',
+        config: {
+          repository: {
+            owner: 'Leo Hoerdemann',
+            name: 'Youtube_Music_Discord_Status'
+          },
+          prerelease: true
+        }
+      }
+    ]
 };
