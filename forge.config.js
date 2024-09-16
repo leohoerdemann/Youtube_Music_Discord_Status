@@ -46,7 +46,7 @@ module.exports = {
         name: '@electron-forge/publisher-github',
         config: {
           repository: {
-            owner: 'Leo Hoerdemann',
+            owner: 'leohoerdemann',
             name: 'Youtube_Music_Discord_Status'
           },
           prerelease: true
