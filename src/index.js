@@ -1,3 +1,4 @@
+// main.js
 const { app, BrowserWindow, ipcMain } = require('electron');
 const RPC = require('discord-rpc');
 const path = require('path');
@@ -34,9 +35,6 @@ function createWindow() {
   });
 
   mainWindow.loadURL('https://music.youtube.com/');
-
-  // For debugging
-  // mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
@@ -48,44 +46,41 @@ ipcMain.on('song-info', (event, songInfo) => {
   updateDiscordStatus(songInfo);
 });
 
-function updateDiscordStatus(songInfo) {
-  const { title, artist, album, artwork, songUrl, songStartTime, duration } = songInfo;
-
-  if (!duration || duration <= 0) {
-    // If duration is not available, do not set timestamps
-    console.log('Setting activity without timestamps');
-    rpc.setActivity({
-      details: title || 'Unknown Title',
-      state: artist || 'Unknown Artist',
-      largeImageKey: artwork,
-      largeImageText: album || 'Listening to a track',
-      buttons: [
-        {
-          label: 'Listen on YouTube Music',
-          url: songUrl || 'https://music.youtube.com/',
-        },
-      ],
-      instance: false,
-    });
-  } else {
-    // Set activity with progress bar
-    console.log('Setting activity with timestamps');
-    rpc.setActivity({
-      details: title || 'Unknown Title',
-      state: artist || 'Unknown Artist',
-      startTimestamp: Math.floor(songStartTime / 1000),
-      endTimestamp: Math.floor((songStartTime + duration * 1000) / 1000),
-      largeImageKey: artwork,
-      largeImageText: album || 'Listening to a track',
-      buttons: [
-        {
-          label: 'Listen on YouTube Music',
-          url: songUrl || 'https://music.youtube.com/'
-        }
-      ],
-      instance: false,
-    });
+ipcMain.on('media-playback-state', (event, data) => {
+  if (data.state === 'stopped') {
+    rpc.clearActivity();
   }
+});
+
+function updateDiscordStatus(songInfo) {
+  const { title, artist, album, artwork, songUrl, position, duration } = songInfo;
+
+  // Format position and duration into "MM:SS / MM:SS"
+  const positionStr = formatTime(position);
+  const durationStr = formatTime(duration);
+  const progressStr = `${positionStr} / ${durationStr}`;
+
+  // Set activity with specified variable names
+  rpc.setActivity({
+    details: `${title || 'Unknown Title'} by ${artist || 'Unknown Artist'}`,
+    state: progressStr,
+    largeImageText: album || 'YouTube Music',
+    largeImageKey: artwork,
+    buttons: [
+      {
+        label: 'Listen on YouTube Music',
+        url: songUrl || 'https://music.youtube.com/',
+      },
+    ],
+    instance: false,
+  });
+}
+
+function formatTime(seconds) {
+  if (!seconds || isNaN(seconds)) return '0:00';
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
 rpc.on('ready', () => {
