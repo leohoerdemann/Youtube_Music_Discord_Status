@@ -1,0 +1,1 @@
+Basic electron app to have discord rpc for youtube music

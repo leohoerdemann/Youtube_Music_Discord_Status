@@ -1,95 +1,104 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
-const path = require('node:path');
-const rpc = require('discord-rpc');
-const fs = require('fs');
+const RPC = require('discord-rpc');
+const path = require('path');
 
-const secretsPath = path.join(__dirname, 'secrets.json');
-const secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8'));
-const clientId = secrets.client_id;
+let clientId;
 
-rpc.register(clientId);
-
-const rpcClient = new rpc.Client({ transport: 'ipc' });
-
-rpcClient.on('ready', () => { console.log('RPC Connected!'); });
-
-function setActivity(details) {
-  console.log(details);
-  rpcClient.setActivity({
-    details: details.song,
-    state: details.artist,
-    largeImageKey: 'album_art',
-    largeImageText: details.album,
-    smallImageKey: 'play',
-    smallImageText: 'Listening on YouTube Music',
-    instance: false,
-    buttons: [
-      { label: 'Listen on YouTube Music', url: details.url }
-    ],
-    startTimestamp: details.startTimestamp
-  }).catch(console.error);
-}
-
-rpcClient.login({ clientId }).catch(console.error);
-
-
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (require('electron-squirrel-startup')) {
+// Read the client ID from secrets.json
+try {
+  const secrets = require('./secrets.json');
+  clientId = secrets.client_id;
+  if (!clientId) throw new Error('Client ID is missing in secrets.json');
+} catch (error) {
+  console.error('Failed to read client ID from secrets.json:', error);
   app.quit();
 }
 
-const createWindow = () => {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 1200,
-    titleBarStyle: 'hiddeninset',
+const rpc = new RPC.Client({ transport: 'ipc' });
+
+let mainWindow;
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    icon: path.join(__dirname, 'assets', 'icon.png'),
+    title: 'YouTube Music',
     autoHideMenuBar: true,
-      webPreferences: {
+    webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false, // This is necessary to prevent CORS errors
+      webSecurity: false,
     },
   });
 
+  mainWindow.loadURL('https://music.youtube.com/');
 
-  // load youtube music
-  mainWindow.loadURL('https://music.youtube.com');
+  // For debugging
+  // mainWindow.webContents.openDevTools();
+}
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
-
-  ipcMain.on('update-activity', (event, details) => {
-    console.log('Updating activity...');
-    setActivity(details);
-  });
-
-};
-
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  rpc.login({ clientId }).catch(console.error);
   createWindow();
-
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
 });
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+ipcMain.on('song-info', (event, songInfo) => {
+  updateDiscordStatus(songInfo);
+});
+
+function updateDiscordStatus(songInfo) {
+  const { title, artist, album, artwork, songUrl, songStartTime, duration } = songInfo;
+
+  if (!duration || duration <= 0) {
+    // If duration is not available, do not set timestamps
+    console.log('Setting activity without timestamps');
+    rpc.setActivity({
+      details: title || 'Unknown Title',
+      state: artist || 'Unknown Artist',
+      largeImageKey: artwork,
+      largeImageText: album || 'Listening to a track',
+      buttons: [
+        {
+          label: 'Listen on YouTube Music',
+          url: songUrl || 'https://music.youtube.com/',
+        },
+      ],
+      instance: false,
+    });
+  } else {
+    // Set activity with progress bar
+    console.log('Setting activity with timestamps');
+    rpc.setActivity({
+      details: title || 'Unknown Title',
+      state: artist || 'Unknown Artist',
+      startTimestamp: Math.floor(songStartTime / 1000),
+      endTimestamp: Math.floor((songStartTime + duration * 1000) / 1000),
+      largeImageKey: artwork,
+      largeImageText: album || 'Listening to a track',
+      buttons: [
+        {
+          label: 'Listen on YouTube Music',
+          url: songUrl || 'https://music.youtube.com/'
+        }
+      ],
+      instance: false,
+    });
+  }
+}
+
+rpc.on('ready', () => {
+  console.log('Connected to Discord!');
+});
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    rpc.destroy();
     app.quit();
   }
 });
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.
+app.on('activate', () => {
+  if (mainWindow === null) createWindow();
+});
