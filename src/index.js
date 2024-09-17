@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const RPC = require('discord-rpc');
 const path = require('path');
 
+if (require('electron-squirrel-startup')) app.quit();
+
 let clientId;
 
 try {
