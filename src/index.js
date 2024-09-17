@@ -1,11 +1,9 @@
-// main.js
 const { app, BrowserWindow, ipcMain } = require('electron');
 const RPC = require('discord-rpc');
 const path = require('path');
 
 let clientId;
 
-// Read the client ID from secrets.json
 try {
   const secrets = require('./secrets.json');
   clientId = secrets.client_id;
@@ -15,7 +13,8 @@ try {
   app.quit();
 }
 
-const rpc = new RPC.Client({ transport: 'ipc' });
+let rpc = null;
+let rpcReady = false;
 
 let mainWindow;
 
@@ -35,22 +34,64 @@ function createWindow() {
   });
 
   mainWindow.loadURL('https://music.youtube.com/');
+
+   // Handle the 'will-prevent-unload' event
+   mainWindow.webContents.on('will-prevent-unload', (event) => {
+    // Prevent the default behavior of the event
+    event.preventDefault();
+    // Optionally, log the event or take other actions
+    console.log('Prevented YouTube Music from blocking window unload.');
+  });
 }
 
 app.whenReady().then(() => {
-  rpc.login({ clientId }).catch(console.error);
   createWindow();
 });
 
-ipcMain.on('song-info', (event, songInfo) => {
-  updateDiscordStatus(songInfo);
-});
-
 ipcMain.on('media-playback-state', (event, data) => {
-  if (data.state === 'stopped') {
-    rpc.clearActivity();
+  if (data.state === 'playing') {
+    if (!rpc) {
+      initRpc();
+    }
+  } else if (data.state === 'stopped') {
+    if (rpc) {
+      rpc.clearActivity().catch(console.error).then(() => {
+        rpc.destroy().catch(console.error).then(() => {
+          rpc = null;
+          rpcReady = false;
+        });
+      });
+    }
   }
 });
+
+ipcMain.on('song-info', (event, songInfo) => {
+  if (rpc && rpcReady) {
+    updateDiscordStatus(songInfo);
+  }
+});
+
+function initRpc() {
+  rpc = new RPC.Client({ transport: 'ipc' });
+
+  rpc.on('ready', () => {
+    console.log('Connected to Discord!');
+    rpcReady = true;
+  });
+
+  rpc.on('disconnected', () => {
+    console.log('Discord RPC disconnected');
+    rpc.destroy().catch(console.error);
+    rpc = null;
+    rpcReady = false;
+  });
+
+  rpc.on('error', (error) => {
+    console.error('RPC Error:', error);
+  });
+
+  rpc.login({ clientId }).catch(console.error);
+}
 
 function updateDiscordStatus(songInfo) {
   const { title, artist, album, artwork, songUrl, position, duration } = songInfo;
@@ -60,7 +101,7 @@ function updateDiscordStatus(songInfo) {
   const durationStr = formatTime(duration);
   const progressStr = `${positionStr} / ${durationStr}`;
 
-  // Set activity with specified variable names
+  // Set activity with your specified formatting
   rpc.setActivity({
     details: `${title || 'Unknown Title'} by ${artist || 'Unknown Artist'}`,
     state: progressStr,
@@ -73,7 +114,7 @@ function updateDiscordStatus(songInfo) {
       },
     ],
     instance: false,
-  });
+  }).catch(console.error);
 }
 
 function formatTime(seconds) {
@@ -83,17 +124,27 @@ function formatTime(seconds) {
   return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
-rpc.on('ready', () => {
-  console.log('Connected to Discord!');
-});
-
 app.on('window-all-closed', () => {
+  // On macOS, it's common for apps to stay open until explicitly closed
   if (process.platform !== 'darwin') {
-    rpc.destroy();
+    if (rpc) {
+      console.log('Clearing Discord activity and destroying RPC connection');
+      rpc.clearActivity().catch(console.error).then(() => {
+        rpc.destroy().catch(console.error).then(() => {
+          rpc = null;
+          rpcReady = false;
+        });
+      });
+    }
     app.quit();
   }
 });
 
 app.on('activate', () => {
-  if (mainWindow === null) createWindow();
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection:', reason);
 });

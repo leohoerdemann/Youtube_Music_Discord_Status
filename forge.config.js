@@ -9,7 +9,13 @@ module.exports = {
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
-      config: {},
+      config: {
+          "name": "youtube-music-discord",
+          "setupIcon": "src/assets/icon.png",
+          "setupExe": "YouTubeMusicDiscordSetup.exe",
+          "noMsi": true,
+          "shortcutName": "YouTube Music Discord"
+        },
     },
     {
       name: '@electron-forge/maker-zip',

@@ -12,20 +12,21 @@ window.addEventListener('DOMContentLoaded', () => {
     if (playbackState !== lastPlaybackState) {
       lastPlaybackState = playbackState;
 
-      if (playbackState === 'paused' || playbackState === 'none') {
-        // Send a message to clear the status
+      if (playbackState === 'playing') {
+        // Media started playing
+        ipcRenderer.send('media-playback-state', { state: 'playing' });
+      } else if (playbackState === 'paused' || playbackState === 'none') {
+        // Media paused or stopped
         ipcRenderer.send('media-playback-state', { state: 'stopped' });
       }
     }
 
-    if (metadata && playbackState === 'playing') {
+    if (playbackState === 'playing' && metadata) {
       const title = metadata.title || '';
 
       // Check if the song has changed
       if (title !== lastTitle) {
         lastTitle = title;
-
-        // Send song info to the main process
         sendSongInfo(metadata);
       } else {
         // Update position and duration
