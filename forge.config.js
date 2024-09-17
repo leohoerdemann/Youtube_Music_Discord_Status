@@ -11,7 +11,7 @@ module.exports = {
       name: '@electron-forge/maker-squirrel',
       config: {
           "name": "youtube-music-discord",
-          "setupIcon": "src/assets/icon.png",
+          "setupIcon": "src/assets/icon.ico",
           "setupExe": "YouTubeMusicDiscordSetup.exe",
           "noMsi": true,
           "shortcutName": "YouTube Music Discord"
